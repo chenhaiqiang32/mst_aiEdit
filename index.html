@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>编辑平台</title>
+</head>
+
+<body>
+  <div id="app">
+    <div class="toolbar">
+      <div class="upload-section">
+        <button id="uploadTexture" class="btn">上传纹理底图</button>
+        <button id="uploadAnchor" class="btn">上传标记物</button>
+      </div>
+      <div class="info-panel">
+        <div id="coordinates">坐标: X: 0, Y: 0</div>
+        <div id="dimensions">尺寸: 宽: 0px, 高: 0px</div>
+      </div>
+      <button id="saveBtn" class="btn primary">保存</button>
+      <button id="clearBtn" class="toolbar-btn">
+        <i class="fas fa-trash"></i>
+        清空画布
+      </button>
+    </div>
+    <div id="editor" class="editor-container">
+      <div id="dropZone" class="drop-zone">
+        <div class="drop-message" style="color: #fff;opacity: 0.5;">标记物拖拽到这里</div>
+      </div>
+      <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <div>上传中...</div>
+      </div>
+    </div>
+  </div>
+  <script src="/public/config.js"></script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

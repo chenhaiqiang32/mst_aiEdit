@@ -1,0 +1,11 @@
+{
+  "name": "test",
+  "description": "test",
+  "image": "test",
+  "attributes": [
+    {
+      "trait_type": "test",
+      "value": "test"
+    }
+  ]
+}
