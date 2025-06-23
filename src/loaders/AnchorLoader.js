@@ -45,19 +45,10 @@ export class AnchorLoader {
 
   createBorderLine(object) {
     // 移除旧的边框线
-    if (this.editor.borderLine) {
-      this.editor.scene.remove(this.editor.borderLine);
-    }
-    if (this.editor.glowBorderLine) {
-      this.editor.scene.remove(this.editor.glowBorderLine);
-    }
+    this.cleanupBorderLines();
 
     // 移除旧的缩放控制点
-    if (this.editor.scaleHandles) {
-      this.editor.scaleHandles.forEach((handle) => {
-        this.editor.scene.remove(handle);
-      });
-    }
+    this.cleanupScaleHandles();
 
     // 计算对象的边界框
     const box = new THREE.Box3().setFromObject(object);
@@ -135,12 +126,47 @@ export class AnchorLoader {
     });
   }
 
+  // 新增：清理边框线
+  cleanupBorderLines() {
+    if (this.editor.borderLine) {
+      if (this.editor.borderLine.geometry) {
+        this.editor.borderLine.geometry.dispose();
+      }
+      this.editor.scene.remove(this.editor.borderLine);
+      this.editor.borderLine = null;
+    }
+
+    if (this.editor.glowBorderLine) {
+      if (this.editor.glowBorderLine.geometry) {
+        this.editor.glowBorderLine.geometry.dispose();
+      }
+      this.editor.scene.remove(this.editor.glowBorderLine);
+      this.editor.glowBorderLine = null;
+    }
+  }
+
+  // 新增：清理缩放控制点
+  cleanupScaleHandles() {
+    if (this.editor.scaleHandles) {
+      this.editor.scaleHandles.forEach((handle) => {
+        if (handle.geometry) {
+          handle.geometry.dispose();
+        }
+        if (handle.material) {
+          handle.material.dispose();
+        }
+        this.editor.scene.remove(handle);
+      });
+      this.editor.scaleHandles = [];
+    }
+  }
+
   // 辅助函数：判断是否为视频格式
   isVideo(url) {
     return /\.(mp4|webm|ogg)$/i.test(url);
   }
 
-  loadAnchor(url) {
+  loadAnchor(url, position = null) {
     console.log("Loading anchor from URL:", url);
 
     // 检查文件类型
@@ -153,15 +179,15 @@ export class AnchorLoader {
     );
 
     if (isModel) {
-      return this.loadModel(url);
+      return this.loadModel(url, position);
     } else if (isVideoFile) {
-      return this.loadVideoTexture(url);
+      return this.loadVideoTexture(url, position);
     } else {
-      return this.loadTexture(url);
+      return this.loadTexture(url, position);
     }
   }
 
-  loadTexture(url) {
+  loadTexture(url, position = null) {
     return new Promise((resolve, reject) => {
       if (!this.editor.texture) {
         reject(new Error("请先加载纹理图片"));
@@ -188,11 +214,15 @@ export class AnchorLoader {
           const mesh = new THREE.Mesh(geometry, material);
 
           // 设置标记物位置到纹理底图中心
-          mesh.position.set(
-            this.editor.texture.position.x,
-            this.editor.texture.position.y,
-            0.1
-          );
+          if (position) {
+            mesh.position.set(position.x, position.y, position.z || 0.1);
+          } else {
+            mesh.position.set(
+              this.editor.texture.position.x,
+              this.editor.texture.position.y,
+              0.1
+            );
+          }
 
           mesh.renderOrder = 1; // 保证标记物图片在底图之上
 
@@ -224,7 +254,7 @@ export class AnchorLoader {
     });
   }
 
-  loadModel(url) {
+  loadModel(url, position = null) {
     return new Promise((resolve, reject) => {
       if (!this.editor.texture) {
         reject(new Error("请先加载纹理图片"));
@@ -311,11 +341,15 @@ export class AnchorLoader {
             }
 
             // 设置模型组的位置到纹理底图中心
-            modelGroup.position.set(
-              this.editor.texture.position.x,
-              this.editor.texture.position.y,
-              20
-            );
+            if (position) {
+              modelGroup.position.set(position.x, position.y, position.z || 20);
+            } else {
+              modelGroup.position.set(
+                this.editor.texture.position.x,
+                this.editor.texture.position.y,
+                20
+              );
+            }
 
             modelGroup.renderOrder = 5; // 保证模型在底图之上即可
 
@@ -376,7 +410,7 @@ export class AnchorLoader {
     });
   }
 
-  loadVideoTexture(url) {
+  loadVideoTexture(url, position = null) {
     return new Promise((resolve, reject) => {
       // 允许没有底图时也能添加视频标记物
       const video = document.createElement("video");
@@ -418,7 +452,10 @@ export class AnchorLoader {
         // 支持多个视频标记物，默认放在底图中心，否则场景中心
         let posX = 0,
           posY = 0;
-        if (this.editor.texture) {
+        if (position) {
+          posX = position.x;
+          posY = position.y;
+        } else if (this.editor.texture) {
           posX = this.editor.texture.position.x;
           posY = this.editor.texture.position.y;
         }

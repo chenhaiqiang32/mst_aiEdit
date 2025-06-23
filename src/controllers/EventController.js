@@ -30,8 +30,9 @@ export class EventController {
     const uploadAnchor = document.getElementById("uploadAnchor");
     const saveBtn = document.getElementById("saveBtn");
     const clearBtn = document.getElementById("clearBtn");
+    const editorContainer = document.getElementById("editor");
 
-    // 拖拽事件
+    // 拖拽事件 - dropZone区域
     dropZone.addEventListener("dragover", (e) => {
       e.preventDefault();
       dropZone.classList.add("drag-over");
@@ -46,7 +47,43 @@ export class EventController {
       dropZone.classList.remove("drag-over");
       const files = e.dataTransfer.files;
       if (files.length > 0) {
-        this.editor.handleFileUpload(files[0]);
+        this.editor.handleFileUpload(files[0], "texture");
+      }
+    });
+
+    // 场景拖拽事件 - 整个编辑器容器
+    editorContainer.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      // 如果dropZone可见，不处理场景拖拽
+      if (dropZone.style.display !== "none") {
+        return;
+      }
+      editorContainer.style.cursor = "copy";
+    });
+
+    editorContainer.addEventListener("dragleave", (e) => {
+      // 只有当鼠标真正离开容器时才移除样式
+      if (!editorContainer.contains(e.relatedTarget)) {
+        editorContainer.style.cursor = "default";
+      }
+    });
+
+    editorContainer.addEventListener("drop", (e) => {
+      e.preventDefault();
+      editorContainer.style.cursor = "default";
+
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        // 获取拖拽位置
+        const rect = editorContainer.getBoundingClientRect();
+        const dropX = e.clientX - rect.left;
+        const dropY = e.clientY - rect.top;
+
+        // 将屏幕坐标转换为世界坐标
+        const worldPos = this.screenToWorldPosition(dropX, dropY);
+
+        // 加载标记物并放置到指定位置
+        this.editor.handleFileUpload(files[0], "anchor", worldPos);
       }
     });
 
@@ -159,15 +196,17 @@ export class EventController {
       }
     }
 
-    // 直接检测所有标记物
+    // 改进的标记物检测逻辑
+    let selectedAnchor = null;
+
+    // 方法1：直接检测所有标记物（包括Group）
     const intersects = this.raycaster.intersectObjects(
       this.editor.anchors,
       true
     );
-    console.log("Intersects:", intersects);
+    console.log("Direct intersects:", intersects);
 
     if (intersects.length > 0) {
-      console.log("Anchor selected");
       const selectedObject = intersects[0].object;
 
       // 如果点击的是组内的对象，获取其父组
@@ -178,34 +217,53 @@ export class EventController {
 
       // 确保选中的是标记物
       if (this.editor.anchors.includes(anchor)) {
-        console.log("Found valid anchor:", anchor);
-        // 更新选中的标记物
-        if (this.editor.selectedAnchor !== anchor) {
-          this.editor.selectedAnchor = anchor;
+        selectedAnchor = anchor;
+        console.log("Found valid anchor via direct detection:", anchor);
+      }
+    }
 
-          // 更新边框线
-          if (this.editor.anchorLoader) {
-            this.editor.anchorLoader.createBorderLine(anchor);
-          }
+    // 方法2：如果直接检测失败，尝试检测标记物的边界框
+    if (!selectedAnchor) {
+      for (const anchor of this.editor.anchors) {
+        const box = new THREE.Box3().setFromObject(anchor);
+        const mouseWorldPos = this.getMouseWorldPosition(event);
 
-          // 更新顶部坐标和尺寸显示
-          this.editor.infoController.updateInfo();
+        // 检查鼠标是否在标记物的边界框内
+        if (box.containsPoint(mouseWorldPos)) {
+          selectedAnchor = anchor;
+          console.log("Found valid anchor via bounding box detection:", anchor);
+          break;
+        }
+      }
+    }
 
-          // 同步更新UI列表
-          this.editor.updateAnchorListSelection();
+    if (selectedAnchor) {
+      console.log("Anchor selected:", selectedAnchor);
+
+      // 更新选中的标记物
+      if (this.editor.selectedAnchor !== selectedAnchor) {
+        this.editor.selectedAnchor = selectedAnchor;
+
+        // 更新边框线
+        if (this.editor.anchorLoader) {
+          this.editor.anchorLoader.createBorderLine(selectedAnchor);
         }
 
-        // 只有在不是缩放状态时才设置拖动状态
-        if (!this.isScaling) {
-          console.log("Starting drag");
-          this.editor.isDragging = true;
+        // 更新顶部坐标和尺寸显示
+        this.editor.infoController.updateInfo();
 
-          // 记录鼠标点击时的世界坐标和标记物位置
-          this.dragStartWorldPos = this.getMouseWorldPosition(event);
-          this.dragStartAnchorPos = anchor.position.clone();
-        }
-      } else {
-        console.log("Selected object is not a valid anchor");
+        // 同步更新UI列表
+        this.editor.updateAnchorListSelection();
+      }
+
+      // 只有在不是缩放状态时才设置拖动状态
+      if (!this.isScaling) {
+        console.log("Starting drag");
+        this.editor.isDragging = true;
+
+        // 记录鼠标点击时的世界坐标和标记物位置
+        this.dragStartWorldPos = this.getMouseWorldPosition(event);
+        this.dragStartAnchorPos = selectedAnchor.position.clone();
       }
     } else {
       // 没有选中 anchor，进入场景拖动模式
@@ -258,11 +316,29 @@ export class EventController {
         this.editor.renderer.domElement.style.cursor = cursorStyle;
       } else {
         // 检查是否在标记物上或附近
+        let isOnAnchor = false;
+
+        // 方法1：直接射线检测
         const anchorIntersects = this.raycaster.intersectObject(
           this.editor.selectedAnchor,
           true
         );
         if (anchorIntersects.length > 0) {
+          isOnAnchor = true;
+        }
+
+        // 方法2：如果直接检测失败，检查边界框
+        if (!isOnAnchor) {
+          const mouseWorldPos = this.getMouseWorldPosition(event);
+          const anchorBox = new THREE.Box3().setFromObject(
+            this.editor.selectedAnchor
+          );
+          if (anchorBox.containsPoint(mouseWorldPos)) {
+            isOnAnchor = true;
+          }
+        }
+
+        if (isOnAnchor) {
           // 鼠标在标记物上，显示move样式
           this.editor.renderer.domElement.style.cursor = "move";
         } else {
@@ -466,12 +542,29 @@ export class EventController {
       this.raycaster.setFromCamera(this.mouse, this.editor.camera);
 
       // 检测射线与选中标记物的相交
+      let shouldScale = false;
+
+      // 方法1：直接射线检测
       const intersects = this.raycaster.intersectObject(
         this.editor.selectedAnchor,
         true
       );
-
       if (intersects.length > 0) {
+        shouldScale = true;
+      }
+
+      // 方法2：如果直接检测失败，检查边界框
+      if (!shouldScale) {
+        const mouseWorldPos = this.getMouseWorldPosition(event);
+        const anchorBox = new THREE.Box3().setFromObject(
+          this.editor.selectedAnchor
+        );
+        if (anchorBox.containsPoint(mouseWorldPos)) {
+          shouldScale = true;
+        }
+      }
+
+      if (shouldScale) {
         // 计算缩放比例
         const scaleFactor = event.deltaY > 0 ? 0.9 : 1.1;
         const newScale = Math.max(
@@ -617,5 +710,24 @@ export class EventController {
     }
 
     return "nw-resize";
+  }
+
+  // 新增：将屏幕坐标转换为世界坐标
+  screenToWorldPosition(screenX, screenY) {
+    const rect = this.editor.renderer.domElement.getBoundingClientRect();
+    const mouseX = ((screenX - rect.left) / rect.width) * 2 - 1;
+    const mouseY = -((screenY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(
+      new THREE.Vector2(mouseX, mouseY),
+      this.editor.camera
+    );
+
+    // 计算鼠标射线与Z=0平面的交点
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const intersectionPoint = new THREE.Vector3();
+    this.raycaster.ray.intersectPlane(plane, intersectionPoint);
+
+    return intersectionPoint;
   }
 }

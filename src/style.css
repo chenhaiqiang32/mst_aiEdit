@@ -173,8 +173,8 @@ body {
 }
 
 .drop-zone .drop-message {
-  color: #666 !important;
-  opacity: 1 !important;
+  color: #858282 !important;
+  opacity: 0.8 !important;
 }
 
 .loading {

@@ -121,7 +121,7 @@ class Editor {
     this.animate();
   }
 
-  async handleFileUpload(file, type = "texture") {
+  async handleFileUpload(file, type = "texture", position = null) {
     const loading = document.getElementById("loading");
     loading.classList.remove("hidden");
 
@@ -147,7 +147,7 @@ class Editor {
           dropZone.style.display = "none";
         }
       } else {
-        const anchor = await this.anchorLoader.loadAnchor(fileUrl);
+        const anchor = await this.anchorLoader.loadAnchor(fileUrl, position);
         this.addAnchorToList(anchor, file.name);
         this.selectedAnchor = anchor;
       }
@@ -253,16 +253,8 @@ class Editor {
         }
       }
 
-      // 清理材质和几何体
-      if (anchor.material) {
-        if (anchor.material.map) {
-          anchor.material.map.dispose();
-        }
-        anchor.material.dispose();
-      }
-      if (anchor.geometry) {
-        anchor.geometry.dispose();
-      }
+      // 使用新的清理方法
+      this.cleanupAnchor(anchor);
       this.scene.remove(anchor);
     });
 
@@ -270,23 +262,9 @@ class Editor {
     this.anchors = [];
     this.selectedAnchor = null;
 
-    // 清理边框线和光晕线
-    if (this.borderLine) {
-      this.scene.remove(this.borderLine);
-      this.borderLine = null;
-    }
-    if (this.glowBorderLine) {
-      this.scene.remove(this.glowBorderLine);
-      this.glowBorderLine = null;
-    }
-
-    // 清理缩放控制点
-    if (this.scaleHandles) {
-      this.scaleHandles.forEach((handle) => {
-        this.scene.remove(handle);
-      });
-      this.scaleHandles = [];
-    }
+    // 使用新的清理方法
+    this.cleanupBorderLines();
+    this.cleanupScaleHandles();
 
     // 清空UI列表
     if (this.textureList) this.textureList.innerHTML = "";
@@ -356,36 +334,17 @@ class Editor {
         }
 
         // 清理标记物的材质和几何体
-        if (this.selectedAnchor.material) {
-          if (this.selectedAnchor.material.map) {
-            this.selectedAnchor.material.map.dispose();
-          }
-          this.selectedAnchor.material.dispose();
-        }
-        if (this.selectedAnchor.geometry) {
-          this.selectedAnchor.geometry.dispose();
-        }
+        this.cleanupAnchor(this.selectedAnchor);
+
         this.scene.remove(this.selectedAnchor);
         this.anchors.splice(index, 1);
         this.selectedAnchor = null;
 
         // 清理边框线和光晕线
-        if (this.borderLine) {
-          this.scene.remove(this.borderLine);
-          this.borderLine = null;
-        }
-        if (this.glowBorderLine) {
-          this.scene.remove(this.glowBorderLine);
-          this.glowBorderLine = null;
-        }
+        this.cleanupBorderLines();
 
         // 清理缩放控制点
-        if (this.scaleHandles) {
-          this.scaleHandles.forEach((handle) => {
-            this.scene.remove(handle);
-          });
-          this.scaleHandles = [];
-        }
+        this.cleanupScaleHandles();
 
         // 清空轮廓效果
         if (this.rendererController.outlinePass) {
@@ -412,6 +371,87 @@ class Editor {
         // 重新渲染场景
         this.renderer.render(this.scene, this.camera);
       }
+    }
+  }
+
+  // 新增：递归清理标记物及其子对象
+  cleanupAnchor(anchor) {
+    if (!anchor) return;
+
+    // 如果是Group，递归清理所有子对象
+    if (anchor.isGroup) {
+      const children = [...anchor.children];
+      children.forEach((child) => {
+        this.cleanupAnchor(child);
+        anchor.remove(child);
+      });
+    }
+
+    // 清理材质和几何体
+    if (anchor.material) {
+      if (Array.isArray(anchor.material)) {
+        anchor.material.forEach((mat) => {
+          if (mat.map) {
+            mat.map.dispose();
+          }
+          mat.dispose();
+        });
+      } else {
+        if (anchor.material.map) {
+          anchor.material.map.dispose();
+        }
+        anchor.material.dispose();
+      }
+    }
+
+    if (anchor.geometry) {
+      anchor.geometry.dispose();
+    }
+
+    // 清理用户数据
+    if (anchor.userData) {
+      anchor.userData = {};
+    }
+  }
+
+  // 新增：清理边框线
+  cleanupBorderLines() {
+    if (this.borderLine) {
+      if (this.borderLine.geometry) {
+        this.borderLine.geometry.dispose();
+      }
+      if (this.borderLine.material) {
+        this.borderLine.material.dispose();
+      }
+      this.scene.remove(this.borderLine);
+      this.borderLine = null;
+    }
+
+    if (this.glowBorderLine) {
+      if (this.glowBorderLine.geometry) {
+        this.glowBorderLine.geometry.dispose();
+      }
+      if (this.glowBorderLine.material) {
+        this.glowBorderLine.material.dispose();
+      }
+      this.scene.remove(this.glowBorderLine);
+      this.glowBorderLine = null;
+    }
+  }
+
+  // 新增：清理缩放控制点
+  cleanupScaleHandles() {
+    if (this.scaleHandles) {
+      this.scaleHandles.forEach((handle) => {
+        if (handle.geometry) {
+          handle.geometry.dispose();
+        }
+        if (handle.material) {
+          handle.material.dispose();
+        }
+        this.scene.remove(handle);
+      });
+      this.scaleHandles = [];
     }
   }
 
