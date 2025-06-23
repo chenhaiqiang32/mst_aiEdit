@@ -41,7 +41,7 @@ class Editor {
 
     // 初始化场景
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0.4, 0.4, 0.4); // three.js编辑器风格深灰色
+    this.scene.background = new THREE.Color(0.46, 0.46, 0.46); // three.js编辑器风格中灰色
 
     // 创建网格底面
     this.createGridPlane();
@@ -73,6 +73,7 @@ class Editor {
 
     // 初始化状态变量
     this.texture = null;
+    this.textures = []; // 存储所有上传的纹理
     this.anchors = []; // 存储多个标记物
     this.selectedAnchor = null; // 当前选中的标记物
     this.isDragging = false;
@@ -85,6 +86,11 @@ class Editor {
     this.originalScale = 1;
     this.originalPosition = new THREE.Vector3();
     this.textureBox = null;
+
+    // 获取UI元素
+    this.textureList = document.getElementById("textureList");
+    this.anchorList = document.getElementById("anchorList");
+    this.extraInfo = document.getElementById("extraInfo");
 
     // 初始化时钟用于动画
     this.clock = new THREE.Clock();
@@ -134,6 +140,7 @@ class Editor {
 
       if (type === "texture") {
         this.texture = await this.textureLoader.loadTexture(fileUrl);
+        this.addTextureToList(this.texture, file.name);
         // 隐藏拖拽区域
         const dropZone = document.getElementById("dropZone");
         if (dropZone) {
@@ -141,7 +148,7 @@ class Editor {
         }
       } else {
         const anchor = await this.anchorLoader.loadAnchor(fileUrl);
-        this.anchors.push(anchor);
+        this.addAnchorToList(anchor, file.name);
         this.selectedAnchor = anchor;
       }
     } catch (error) {
@@ -176,8 +183,18 @@ class Editor {
           height: this.texture.material.map.image.height,
         },
       },
-      anchors: this.anchors.map((anchor) => ({
-        type: anchor.material?.map ? "PIC" : "MODEL",
+      anchor: this.anchors.map((anchor) => ({
+        type: (() => {
+          if (anchor.userData?.isModel) {
+            return "MODEL";
+          } else if (anchor.material?.map?.source?.data?.tagName === "VIDEO") {
+            return "VIDEO";
+          } else if (anchor.material?.map) {
+            return "PIC";
+          } else {
+            return "MODEL"; // 默认类型
+          }
+        })(),
         position: {
           x: Math.round(anchor.position.x * 100),
           y: Math.round(anchor.position.y * 100),
@@ -189,10 +206,11 @@ class Editor {
         url:
           anchor.material?.map?.source?.data?.src || anchor.userData?.modelUrl,
       })),
-      extra: JSON.stringify({ id: "1" }),
+      extra: this.extraInfo.value,
     };
 
     try {
+      alert(JSON.stringify(data));
       const response = await submitFile(data);
       console.log("保存成功:", response);
       alert("保存成功");
@@ -270,6 +288,11 @@ class Editor {
       this.scaleHandles = [];
     }
 
+    // 清空UI列表
+    if (this.textureList) this.textureList.innerHTML = "";
+    if (this.anchorList) this.anchorList.innerHTML = "";
+    if (this.extraInfo) this.extraInfo.value = "";
+
     // 清空轮廓效果
     if (this.rendererController.outlinePass) {
       this.rendererController.outlinePass.selectedObjects = [];
@@ -311,6 +334,14 @@ class Editor {
     if (this.selectedAnchor) {
       const index = this.anchors.indexOf(this.selectedAnchor);
       if (index > -1) {
+        // 从UI列表中移除
+        const anchorItem = this.anchorList.querySelector(
+          `[data-anchor-id="${this.selectedAnchor.uuid}"]`
+        );
+        if (anchorItem) {
+          this.anchorList.removeChild(anchorItem);
+        }
+
         // 清理动画混合器
         if (
           this.selectedAnchor.userData &&
@@ -471,6 +502,100 @@ class Editor {
 
     // 更新网格大小
     this.updateGridSize();
+  }
+
+  addTextureToList(texture, name) {
+    if (!this.textureList) return;
+    // 只保留最新一张
+    this.textureList.innerHTML = "";
+
+    const textureItem = document.createElement("div");
+    textureItem.className = "list-item";
+    textureItem.dataset.textureUrl = texture.material.map.source.data.src;
+
+    const img = document.createElement("img");
+    img.src = texture.material.map.source.data.src;
+    textureItem.appendChild(img);
+
+    const span = document.createElement("span");
+    span.textContent = name;
+    textureItem.appendChild(span);
+
+    this.textureList.appendChild(textureItem);
+  }
+
+  addAnchorToList(anchor, name) {
+    if (!this.anchorList) return;
+    const anchorItem = document.createElement("div");
+    anchorItem.className = "list-item";
+    anchorItem.dataset.anchorId = anchor.uuid; // 使用uuid作为唯一标识
+
+    const img = document.createElement("img");
+    // 判断类型
+    let type = "image";
+    if (anchor.userData?.isModel) {
+      type = "model";
+    } else if (anchor.material?.map?.source?.data?.tagName === "VIDEO") {
+      type = "video";
+    }
+
+    if (type === "image") {
+      img.src =
+        anchor.material?.map?.source?.data?.src ||
+        "https://via.placeholder.com/40";
+    } else if (type === "video") {
+      img.src = "./video.svg";
+      img.style.background = "#eee";
+      img.style.objectFit = "contain";
+    } else if (type === "model") {
+      img.src = "./model.svg";
+      img.style.background = "#eee";
+      img.style.objectFit = "contain";
+    }
+
+    anchorItem.appendChild(img);
+
+    const span = document.createElement("span");
+    span.textContent = name;
+    anchorItem.appendChild(span);
+
+    anchorItem.addEventListener("click", () => {
+      this.selectAnchor(anchor);
+    });
+
+    this.anchorList.appendChild(anchorItem);
+    this.anchors.push(anchor); // 将anchor添加到数组
+    this.selectAnchor(anchor); // 添加后默认选中
+  }
+
+  selectAnchor(anchor) {
+    if (this.selectedAnchor === anchor) return;
+
+    this.selectedAnchor = anchor;
+
+    // 更新UI列表中的选中状态
+    this.updateAnchorListSelection();
+
+    // 调用anchorLoader来创建边框和控制点
+    if (this.anchorLoader) {
+      this.anchorLoader.createBorderLine(anchor);
+    }
+
+    // 更新信息显示
+    this.infoController.updateInfo();
+  }
+
+  updateAnchorListSelection() {
+    if (!this.anchorList) return;
+    const selectedId = this.selectedAnchor ? this.selectedAnchor.uuid : null;
+
+    Array.from(this.anchorList.children).forEach((child) => {
+      if (child.dataset.anchorId === selectedId) {
+        child.classList.add("selected");
+      } else {
+        child.classList.remove("selected");
+      }
+    });
   }
 }
 

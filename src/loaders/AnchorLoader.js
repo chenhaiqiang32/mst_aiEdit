@@ -246,6 +246,9 @@ export class AnchorLoader {
               if (child.isMesh && child.material) {
                 child.material.transparent = true;
                 child.material.alphaTest = 0.4;
+                child.material.depthTest = true;
+                child.material.depthWrite = true;
+                // 可选：如有需要可设置 child.material.side = THREE.DoubleSide;
               }
             });
 
@@ -263,10 +266,20 @@ export class AnchorLoader {
             const textureBox = new THREE.Box3().setFromObject(
               this.editor.texture
             );
-            console.log("Texture box:", textureBox);
+            const texSize = new THREE.Vector3();
+            textureBox.getSize(texSize);
 
-            // 重置模型的变换
-            model.position.set(0, 0, 0);
+            // 居中模型
+            model.position.sub(center);
+
+            // 缩放模型到纹理宽高的1/3
+            let scale = 1;
+            if (size.x > 0 && size.y > 0) {
+              scale = Math.min(texSize.x / size.x, texSize.y / size.y) * 0.33;
+              model.scale.setScalar(scale);
+            }
+
+            // 重置模型旋转
             model.rotation.set(0, 0, 0);
 
             // 创建一个组来包装模型，便于统一控制
@@ -297,10 +310,6 @@ export class AnchorLoader {
               this.editor.animationMixers.push(mixer);
             }
 
-            // 调整模型位置，使其几何中心与包围盒中心对齐
-            // 这样缩放时就会以包围盒中心为基准
-            model.position.sub(center);
-
             // 设置模型组的位置到纹理底图中心
             modelGroup.position.set(
               this.editor.texture.position.x,
@@ -308,7 +317,7 @@ export class AnchorLoader {
               20
             );
 
-            modelGroup.renderOrder = 4; // 保证模型在底图之上
+            modelGroup.renderOrder = 5; // 保证模型在底图之上即可
 
             // 添加环境光和平行光
             const ambientLight = new THREE.AmbientLight(0xffffff, 1);
@@ -321,14 +330,13 @@ export class AnchorLoader {
             modelGroup.userData = {
               originalSize: size.clone(),
               isModel: true,
-              originalScale: new THREE.Vector3(1, 1, 1),
+              originalScale: new THREE.Vector3(scale, scale, scale),
               originalPosition: modelGroup.position.clone(),
               originalRotation: modelGroup.rotation.clone(),
               modelUrl: url, // 保存模型URL
               modelCenterOffset: center.clone(), // 保存模型中心偏移量
               ...modelGroup.userData, // 保留之前设置的动画相关数据
             };
-            modelGroup.renderOrder = 28;
             this.editor.scene.add(modelGroup);
 
             // 添加到标记物数组

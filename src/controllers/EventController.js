@@ -180,15 +180,20 @@ export class EventController {
       if (this.editor.anchors.includes(anchor)) {
         console.log("Found valid anchor:", anchor);
         // 更新选中的标记物
-        this.editor.selectedAnchor = anchor;
+        if (this.editor.selectedAnchor !== anchor) {
+          this.editor.selectedAnchor = anchor;
 
-        // 更新边框线
-        if (this.editor.anchorLoader) {
-          this.editor.anchorLoader.createBorderLine(anchor);
+          // 更新边框线
+          if (this.editor.anchorLoader) {
+            this.editor.anchorLoader.createBorderLine(anchor);
+          }
+
+          // 更新顶部坐标和尺寸显示
+          this.editor.infoController.updateInfo();
+
+          // 同步更新UI列表
+          this.editor.updateAnchorListSelection();
         }
-
-        // 更新顶部坐标和尺寸显示
-        this.editor.infoController.updateInfo();
 
         // 只有在不是缩放状态时才设置拖动状态
         if (!this.isScaling) {
@@ -208,22 +213,26 @@ export class EventController {
       this.panStart.set(event.clientX, event.clientY);
       this.cameraStart.copy(this.editor.camera.position);
       // 取消选中
-      if (this.editor.borderLine) {
-        this.editor.scene.remove(this.editor.borderLine);
-        this.editor.borderLine = null;
+      if (this.editor.selectedAnchor) {
+        if (this.editor.borderLine) {
+          this.editor.scene.remove(this.editor.borderLine);
+          this.editor.borderLine = null;
+        }
+        if (this.editor.glowBorderLine) {
+          this.editor.scene.remove(this.editor.glowBorderLine);
+          this.editor.glowBorderLine = null;
+        }
+        // 移除缩放控制点
+        if (this.editor.scaleHandles) {
+          this.editor.scaleHandles.forEach((handle) => {
+            this.editor.scene.remove(handle);
+          });
+          this.editor.scaleHandles = [];
+        }
+        this.editor.selectedAnchor = null;
+        // 同步更新UI列表
+        this.editor.updateAnchorListSelection();
       }
-      if (this.editor.glowBorderLine) {
-        this.editor.scene.remove(this.editor.glowBorderLine);
-        this.editor.glowBorderLine = null;
-      }
-      // 移除缩放控制点
-      if (this.editor.scaleHandles) {
-        this.editor.scaleHandles.forEach((handle) => {
-          this.editor.scene.remove(handle);
-        });
-        this.editor.scaleHandles = [];
-      }
-      this.editor.selectedAnchor = null;
     }
   }
 
