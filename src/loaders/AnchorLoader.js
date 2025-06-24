@@ -43,6 +43,25 @@ export class AnchorLoader {
     }
   }
 
+  // 辅助方法：判断标记物是否为3D模型
+  isModelAnchor(object) {
+    return object && object.userData && object.userData.isModel;
+  }
+
+  // 辅助方法：根据标记物类型获取z轴位置
+  getZPositionForAnchor(object, baseZ = 0.1) {
+    if (this.isModelAnchor(object)) {
+      return 200 + (baseZ - 0.1); // 3D模型基础位置200，然后加上偏移
+    }
+    return baseZ; // 2D标记物使用传入的基础位置
+  }
+
+  // 辅助方法：判断文件是否为3D模型
+  isModelFile(url) {
+    const name = url.toLowerCase();
+    return name.endsWith(".glb") || name.endsWith(".gltf");
+  }
+
   createBorderLine(object) {
     // 移除旧的边框线
     this.cleanupBorderLines();
@@ -57,16 +76,19 @@ export class AnchorLoader {
     const center = new THREE.Vector3();
     box.getCenter(center);
 
+    // 根据标记物类型设置边框线的z轴位置
+    const borderZ = this.getZPositionForAnchor(object, 0.1);
+
     // 创建边框顶点
     const points = [];
     const halfWidth = size.x / 2;
     const halfHeight = size.y / 2;
     points.push(
-      new THREE.Vector3(center.x - halfWidth, center.y - halfHeight, 0.1),
-      new THREE.Vector3(center.x + halfWidth, center.y - halfHeight, 0.1),
-      new THREE.Vector3(center.x + halfWidth, center.y + halfHeight, 0.1),
-      new THREE.Vector3(center.x - halfWidth, center.y + halfHeight, 0.1),
-      new THREE.Vector3(center.x - halfWidth, center.y - halfHeight, 0.1)
+      new THREE.Vector3(center.x - halfWidth, center.y - halfHeight, borderZ),
+      new THREE.Vector3(center.x + halfWidth, center.y - halfHeight, borderZ),
+      new THREE.Vector3(center.x + halfWidth, center.y + halfHeight, borderZ),
+      new THREE.Vector3(center.x - halfWidth, center.y + halfHeight, borderZ),
+      new THREE.Vector3(center.x - halfWidth, center.y - halfHeight, borderZ)
     );
     const positions = points.flatMap((p) => [p.x, p.y, p.z]);
     const geometry = new LineGeometry().setPositions(positions);
@@ -84,10 +106,10 @@ export class AnchorLoader {
     this.editor.scene.add(line);
 
     // 创建四个边角的缩放控制点
-    this.createScaleHandles(center, halfWidth, halfHeight);
+    this.createScaleHandles(center, halfWidth, halfHeight, object);
   }
 
-  createScaleHandles(center, halfWidth, halfHeight) {
+  createScaleHandles(center, halfWidth, halfHeight, object) {
     const handleSize = 24; // 控制点大小
     const handleGeometry = new THREE.PlaneGeometry(handleSize, handleSize);
     const handleMaterial = new THREE.MeshBasicMaterial({
@@ -96,6 +118,9 @@ export class AnchorLoader {
       opacity: 0.8,
       side: THREE.DoubleSide,
     });
+
+    // 根据标记物类型设置控制点的z轴位置
+    const handleZ = this.getZPositionForAnchor(object, 0.2);
 
     // 四个边角的位置（相对于标记物中心）
     const corners = [
@@ -110,7 +135,7 @@ export class AnchorLoader {
     corners.forEach((corner, index) => {
       const handle = new THREE.Mesh(handleGeometry, handleMaterial);
       // 控制点位置 = 标记物中心 + 边角偏移
-      handle.position.set(center.x + corner.x, center.y + corner.y, 0.2);
+      handle.position.set(center.x + corner.x, center.y + corner.y, handleZ);
       handle.userData = {
         type: "scaleHandle",
         cornerIndex: index,
@@ -170,8 +195,7 @@ export class AnchorLoader {
     console.log("Loading anchor from URL:", url);
 
     // 检查文件类型
-    const isModel =
-      url.toLowerCase().endsWith(".glb") || url.toLowerCase().endsWith(".gltf");
+    const isModel = this.isModelFile(url);
     const isVideoFile = this.isVideo(url);
     console.log(
       "File type detection:",
@@ -274,11 +298,8 @@ export class AnchorLoader {
             // 设置模型材质透明属性，防止遮挡底图透明区域
             model.traverse((child) => {
               if (child.isMesh && child.material) {
-                child.material.transparent = true;
+                child.material.transparent = false;
                 child.material.alphaTest = 0.4;
-                child.material.depthTest = true;
-                child.material.depthWrite = true;
-                // 可选：如有需要可设置 child.material.side = THREE.DoubleSide;
               }
             });
 
@@ -304,10 +325,6 @@ export class AnchorLoader {
 
             // 缩放模型到纹理宽高的1/3
             let scale = 1;
-            if (size.x > 0 && size.y > 0) {
-              scale = Math.min(texSize.x / size.x, texSize.y / size.y) * 0.33;
-              model.scale.setScalar(scale);
-            }
 
             // 重置模型旋转
             model.rotation.set(0, 0, 0);
@@ -347,7 +364,7 @@ export class AnchorLoader {
               modelGroup.position.set(
                 this.editor.texture.position.x,
                 this.editor.texture.position.y,
-                20
+                200
               );
             }
 

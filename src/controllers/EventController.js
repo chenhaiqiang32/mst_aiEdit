@@ -82,6 +82,16 @@ export class EventController {
         // 将屏幕坐标转换为世界坐标
         const worldPos = this.screenToWorldPosition(dropX, dropY);
 
+        // 检查文件类型，设置正确的z轴位置
+        const fileName = files[0].name;
+        const isModel = this.isModelFile(fileName);
+
+        if (isModel) {
+          worldPos.z = 200; // 3D模型放在z=200位置
+        } else {
+          worldPos.z = 0.1; // 2D标记物放在z=0.1位置
+        }
+
         // 加载标记物并放置到指定位置
         this.editor.handleFileUpload(files[0], "anchor", worldPos);
       }
@@ -179,8 +189,16 @@ export class EventController {
         // 记录初始鼠标世界坐标
         this.initialMouseWorldPos = this.getMouseWorldPosition(event);
 
-        // 记录初始距离
-        this.initialDistance = this.initialMouseWorldPos.distanceTo(
+        // 根据标记物类型调整初始鼠标位置到正确的z平面
+        const modelZ = this.getZPositionForAnchor(this.editor.selectedAnchor);
+        const adjustedInitialMousePos = new THREE.Vector3(
+          this.initialMouseWorldPos.x,
+          this.initialMouseWorldPos.y,
+          modelZ
+        );
+
+        // 记录初始距离（在正确的z平面上计算）
+        this.initialDistance = adjustedInitialMousePos.distanceTo(
           this.anchorCenter
         );
 
@@ -410,10 +428,16 @@ export class EventController {
       // 当前鼠标世界坐标
       const currentMouseWorldPos = this.getMouseWorldPosition(event);
 
-      // 当前距离
-      const currentDistance = currentMouseWorldPos.distanceTo(
-        this.anchorCenter
+      // 根据标记物类型调整鼠标位置到正确的z平面
+      const modelZ = this.getZPositionForAnchor(this.editor.selectedAnchor);
+      const adjustedMousePos = new THREE.Vector3(
+        currentMouseWorldPos.x,
+        currentMouseWorldPos.y,
+        modelZ
       );
+
+      // 当前距离（在正确的z平面上计算）
+      const currentDistance = adjustedMousePos.distanceTo(this.anchorCenter);
 
       // 缩放比
       let scaleRatio = currentDistance / this.initialDistance;
@@ -427,14 +451,13 @@ export class EventController {
         "Initial distance:",
         this.initialDistance,
         "Scale ratio:",
-        scaleRatio
+        scaleRatio,
+        "Model Z:",
+        modelZ
       );
 
       // 应用等比缩放
-      if (
-        this.editor.selectedAnchor.userData &&
-        this.editor.selectedAnchor.userData.isModel
-      ) {
+      if (this.isModelAnchor(this.editor.selectedAnchor)) {
         // 3D模型，xyz等比缩放
         const newScale = this.originalScale * scaleRatio;
         this.editor.selectedAnchor.scale.set(newScale, newScale, newScale);
@@ -463,10 +486,16 @@ export class EventController {
 
       // 让当前拖拽的控制点实时跟随鼠标
       if (this.scaleHandle) {
+        // 根据标记物类型设置控制点的z轴位置
+        const handleZ = this.getZPositionForAnchor(
+          this.editor.selectedAnchor,
+          0.2
+        );
+
         this.scaleHandle.position.set(
           currentMouseWorldPos.x,
           currentMouseWorldPos.y,
-          0.2
+          handleZ
         );
       }
 
@@ -496,8 +525,11 @@ export class EventController {
       const newX = this.dragStartAnchorPos.x + worldDeltaX;
       const newY = this.dragStartAnchorPos.y + worldDeltaY;
 
+      // 根据标记物类型设置z轴位置
+      const newZ = this.getZPositionForAnchor(this.editor.selectedAnchor);
+
       // 设置标记物位置
-      this.editor.selectedAnchor.position.set(newX, newY, 0.1);
+      this.editor.selectedAnchor.position.set(newX, newY, newZ);
 
       // 实时更新边框线
       if (this.editor.anchorLoader) {
@@ -573,10 +605,7 @@ export class EventController {
         );
 
         // 判断是否为3D模型
-        if (
-          this.editor.selectedAnchor.userData &&
-          this.editor.selectedAnchor.userData.isModel
-        ) {
+        if (this.isModelAnchor(this.editor.selectedAnchor)) {
           // 3D模型，xyz等比缩放
           this.editor.selectedAnchor.scale.set(newScale, newScale, newScale);
         } else {
@@ -638,7 +667,13 @@ export class EventController {
 
     this.editor.scaleHandles.forEach((handle) => {
       const handlePos = handle.userData.originalPosition;
-      const handleWorldPos = new THREE.Vector3(handlePos.x, handlePos.y, 0);
+      // 根据标记物类型设置控制点的z轴位置
+      const handleZ = this.getZPositionForAnchor(this.editor.selectedAnchor, 0);
+      const handleWorldPos = new THREE.Vector3(
+        handlePos.x,
+        handlePos.y,
+        handleZ
+      );
       const distance = mouseWorldPos.distanceTo(handleWorldPos);
       console.log(
         "Handle distance check - Handle:",
@@ -696,7 +731,13 @@ export class EventController {
 
     this.editor.scaleHandles.forEach((handle) => {
       const handlePos = handle.userData.originalPosition;
-      const handleWorldPos = new THREE.Vector3(handlePos.x, handlePos.y, 0);
+      // 根据标记物类型设置控制点的z轴位置
+      const handleZ = this.getZPositionForAnchor(this.editor.selectedAnchor, 0);
+      const handleWorldPos = new THREE.Vector3(
+        handlePos.x,
+        handlePos.y,
+        handleZ
+      );
       const distance = mouseWorldPos.distanceTo(handleWorldPos);
 
       if (distance < minDistance) {
@@ -729,5 +770,24 @@ export class EventController {
     this.raycaster.ray.intersectPlane(plane, intersectionPoint);
 
     return intersectionPoint;
+  }
+
+  // 辅助方法：判断标记物是否为3D模型
+  isModelAnchor(anchor) {
+    return anchor && anchor.userData && anchor.userData.isModel;
+  }
+
+  // 辅助方法：根据标记物类型获取z轴位置
+  getZPositionForAnchor(anchor, baseZ = 0.1) {
+    if (this.isModelAnchor(anchor)) {
+      return 200 + (baseZ - 0.1); // 3D模型基础位置200，然后加上偏移
+    }
+    return baseZ; // 2D标记物使用传入的基础位置
+  }
+
+  // 辅助方法：判断文件是否为3D模型
+  isModelFile(fileName) {
+    const name = fileName.toLowerCase();
+    return name.endsWith(".glb") || name.endsWith(".gltf");
   }
 }
