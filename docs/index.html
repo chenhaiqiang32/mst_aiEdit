@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>编辑平台</title>
+  <script type="module" crossorigin src="./assets/index-C0c4sOzw.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DzmuFRII.css">
+</head>
+
+<body>
+  <div id="app">
+    <!-- Left Sidebar -->
+    <div class="sidebar left-sidebar">
+      <h3>纹理底图列表</h3>
+      <div id="textureList" class="item-list">
+        <!-- Texture items will be added here dynamically -->
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="toolbar">
+        <div class="upload-section">
+          <button id="uploadTexture" class="btn">上传纹理底图</button>
+          <button id="uploadAnchor" class="btn">上传标记物</button>
+        </div>
+        <button id="saveBtn" class="btn primary">保存</button>
+        <button id="clearBtn" class="toolbar-btn">
+          <i class="fas fa-trash"></i>
+          清空画布
+        </button>
+      </div>
+      <div id="editor" class="editor-container">
+        <div id="dropZone" class="drop-zone">
+          <div class="drop-message" style="color: #fff;opacity: 0.5;">标记物拖拽到这里</div>
+        </div>
+        <div id="loading" class="loading hidden">
+          <div class="spinner"></div>
+          <div>上传中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar -->
+    <div class="sidebar right-sidebar">
+      <h3>场景标记物</h3>
+      <div id="anchorList" class="item-list">
+        <!-- Anchor items will be added here dynamically -->
+      </div>
+      <div class="info-panel">
+        <h3>属性</h3>
+        <div id="coordinates">坐标: X: 0, Y: 0</div>
+        <div id="dimensions">尺寸: 宽: 0px, 高: 0px</div>
+        <h3>额外信息</h3>
+        <textarea id="extraInfo" placeholder="请输入额外信息..."></textarea>
+      </div>
+    </div>
+
+  </div>
+  <script src="/public/config.js"></script>
+</body>
+
+</html>
