@@ -116,7 +116,9 @@ class Editor {
     axesHelper.position.set(0, 0, 0);
     this.scene.add(axesHelper);
     this.axesHelper = axesHelper;
-    this.fetchCosToken();
+    this.fetchCosToken().catch((error) => {
+      console.error("初始化 COS Token 失败:", error);
+    });
     // 开始动画循环
     this.animate();
   }
@@ -126,8 +128,9 @@ class Editor {
     loading.classList.remove("hidden");
 
     try {
+      await this.ensureCosCredentials();
       if (!this.cosData.tmpSecretId) {
-        await this.fetchCosToken();
+        throw new Error("未获取到有效的 COS 上传凭证，请稍后重试");
       }
       const { uploadFile } = useCos(this.cosData);
       const fileExtension = file.name.split(".").pop();
@@ -159,13 +162,35 @@ class Editor {
     }
   }
 
+  async ensureCosCredentials() {
+    const now = Math.floor(Date.now() / 1000);
+    const expiredTime = Number(this.cosData?.expiredTime || 0);
+    if (
+      !this.cosData?.tmpSecretId ||
+      !expiredTime ||
+      expiredTime - now <= 60
+    ) {
+      await this.fetchCosToken();
+    }
+  }
+
   async fetchCosToken() {
     try {
       const res = await getCosToken();
-      this.cosData = res.data;
+      if (!res?.data) {
+        throw new Error("COS 凭证返回数据为空");
+      }
+      const { startTime, expiredTime, ...rest } = res.data;
+      this.cosData = {
+        ...this.cosData,
+        ...rest,
+        startTime: Number(startTime),
+        expiredTime: Number(expiredTime),
+      };
       console.log("COS Token 获取成功:", this.cosData);
     } catch (e) {
       console.error("获取 COS Token 失败:", e);
+      throw e;
     }
   }
 
